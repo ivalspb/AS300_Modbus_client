@@ -1,0 +1,65 @@
+ModbusClient/
+├── CMakeLists.txt
+├── src/
+│ ├── main.cpp
+│ ├── core/
+│ │ ├── interfaces/
+│ │ │ ├── IModbusClient.h
+│ │ │ ├── IRequestQueue.h
+│ │ │ └── IAddressMapper.h
+│ │ ├── modbus/
+│ │ │ ├── ModbusRequestQueue.h
+│ │ │ ├── ModbusRequestQueue.cpp
+│ │ │ ├── ModbusRequestHandler.h
+│ │ │ ├── ModbusRequestHandler.cpp
+│ │ │ ├── DeltaModbusClient.h
+│ │ │ ├── DeltaModbusClient.cpp
+│ │ │ ├── CustomModbusClient.h
+│ │ │ └── CustomModbusClient.cpp
+│ │ ├── mapping/
+│ │ │ ├── DeltaAddressMapper.h
+│ │ │ ├── DeltaAddressMapper.cpp
+│ │ │ ├── DeltaAddressMap.h
+│ │ │ └── DeltaController.h
+│ │ └── connection/
+│ │ ├── ConnectionManager.h
+│ │ ├── ConnectionManager.cpp
+│ │ ├── ConnectionTester.h
+│ │ └── ConnectionTester.cpp
+│ ├── data/
+│ │ ├── interfaces/
+│ │ │ └── IDataRepository.h
+│ │ ├── DataRepository.h
+│ │ ├── DataRepository.cpp
+│ │ └── DataPoint.h
+│ ├── monitoring/
+│ │ ├── DataMonitor.h
+│ │ ├── DataMonitor.cpp
+│ │ ├── DiscreteInputMonitor.h
+│ │ ├── DiscreteInputMonitor.cpp
+│ │ ├── AnalogValueMonitor.h
+│ │ └── AnalogValueMonitor.cpp
+│ ├── control/
+│ │ ├── ModeController.h
+│ │ ├── ModeController.cpp
+│ │ ├── ParameterController.h
+│ │ └── ParameterController.cpp
+│ ├── gui/
+│ │ ├── MainWindow.h
+│ │ ├── MainWindow.cpp
+│ │ ├── widgets/
+│ │ │ ├── ChartWidget.h
+│ │ │ ├── ChartWidget.cpp
+│ │ │ ├── ConnectionWidget.h
+│ │ │ ├── ConnectionWidget.cpp
+│ │ │ ├── MonitorWidget.h
+│ │ │ └── MonitorWidget.cpp
+│ │ └── factories/
+│ │ ├── WidgetFactory.h
+│ │ └── WidgetFactory.cpp
+│ └── export/
+│ ├── interfaces/
+│ │ └── IExportStrategy.h
+│ ├── PngExportStrategy.h
+│ └── PngExportStrategy.cpp
+└── tests/

@@ -1,0 +1,21 @@
+tests/
+├── CMakeLists.txt
+├── test_main.cpp
+├── unit/
+│   ├── core/
+│   │   ├── test_modbus_request_queue.cpp
+│   │   ├── test_address_mapper.cpp
+│   │   └── test_connection_manager.cpp
+│   ├── data/
+│   │   └── test_data_repository.cpp
+│   ├── monitoring/
+│   │   └── test_monitors.cpp
+│   └── control/
+│       └── test_mode_controller.cpp
+├── integration/
+│   └── test_modbus_integration.cpp
+└── mocks/
+    ├── MockModbusClient.h
+    ├── MockModbusClient.cpp
+    ├── MockDataRepository.h
+    └── MockDataRepository.cpp
