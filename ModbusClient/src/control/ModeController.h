@@ -5,15 +5,15 @@
 
 class IModbusClient;
 class QPushButton;
+class IDataRepository;
 
 class ModeController : public QObject {
     Q_OBJECT
 public:
     explicit ModeController(IModbusClient* client, QObject* parent = nullptr);
 
-    void setModeButtons(QPushButton* mode1, QPushButton* mode2, QPushButton* mode3,
-                       QPushButton* mode4, QPushButton* mode5, QPushButton* stopButton);
     void setConnectionState(bool connected);
+    void setDataRepository(IDataRepository* repository) { m_dataRepository = repository; }
     QString currentMode() const { return m_currentMode; }
 
 signals:
@@ -24,8 +24,6 @@ signals:
 
 public slots:
     void stopTest();  // Принудительная остановка теста
-
-private slots:
     void onMode1Clicked();
     void onMode2Clicked();
     void onMode3Clicked();
@@ -33,21 +31,15 @@ private slots:
     void onMode5Clicked();
     void onStopClicked();
     void onRegisterWriteVerified(QModbusDataUnit::RegisterType type, quint16 address, quint16 value, bool success);
+    void onSessionCreated(int sessionId);
 
 private:
-    void startTest(const QString& mode, QPushButton* button);
+    void startTest(const QString& mode);
     void initializeModes();
-    void updateButtonStates();
-    void setActiveModeButton(QPushButton* activeButton);
+    void writeModeRegister();
 
     IModbusClient* m_client;
-    QPushButton* m_modeButton1;
-    QPushButton* m_modeButton2;
-    QPushButton* m_modeButton3;
-    QPushButton* m_modeButton4;
-    QPushButton* m_modeButton5;
-    QPushButton* m_stopButton;
-    QMap<QString, QString> m_modeMap;
+    IDataRepository* m_dataRepository;
     QString m_currentMode;
     bool m_connected;
     bool m_testRunning;

@@ -15,10 +15,12 @@ ControlStateMachine::ControlStateMachine(IModbusClient* client, QObject* parent)
     , m_stateMachine(new QStateMachine(this))
     , m_m11Ready(false)
     , m_m12Started(false)
-    , m_completionStatus(false)
+    , m_m0Status(false)
+    , m_m14Status(false)
 {
     registerMetaTypes();
     setupStateMachine();
+    setupStatusMonitoring(); // НОВЫЙ метод
 }
 
 ControlStateMachine::~ControlStateMachine() {
@@ -29,6 +31,81 @@ ControlStateMachine::~ControlStateMachine() {
 
 void ControlStateMachine::registerMetaTypes() {
     qRegisterMetaType<ControlStateMachine::State>("ControlStateMachine::State");
+}
+
+void ControlStateMachine::setupStatusMonitoring() {
+    if (!m_client) {
+        qCritical() << "ControlStateMachine: IModbusClient is null!";
+        return;
+    }
+
+    // КРИТИЧЕСКИ ВАЖНО: Подключаемся к сигналу чтения регистров
+    connect(m_client, &IModbusClient::registerReadCompleted,
+            this, &ControlStateMachine::onStatusRegisterRead);
+
+    qDebug() << "ControlStateMachine: Status register monitoring configured";
+}
+
+void ControlStateMachine::onStatusRegisterRead(QModbusDataUnit::RegisterType type,
+                                               quint16 address,
+                                               quint16 value) {
+    // Обрабатываем только Coils (M-регистры)
+    if (type != QModbusDataUnit::Coils) {
+        return;
+    }
+
+    // M11 - готовность к запуску
+    if (address == DeltaAS332T::Addresses::M11_READY_STATUS) {
+        bool ready = (value > 0);
+        if (m_m11Ready != ready) {
+            m_m11Ready = ready;
+            if (ready && m_currentState == STATE_READY_CHECK) {
+                qDebug() << "ControlStateMachine: M11=1 detected, transitioning to START_INTERRUPT";
+                emit m11ReadySignal();
+            }
+        }
+    }
+    // M12 - тест запущен
+    else if (address == DeltaAS332T::Addresses::M12_START_STATUS) {
+        bool started = (value > 0);
+        if (m_m12Started != started) {
+            m_m12Started = started;
+            if (started && m_currentState == STATE_START_INTERRUPT) {
+                qDebug() << "ControlStateMachine: M12=1 detected, transitioning to STOP";
+                emit m12StartedSignal();
+            }
+        }
+    }
+    // M0 - остановка
+    else if (address == DeltaAS332T::Addresses::M0_STOP_STATUS) {
+        bool stopped = (value > 0);
+        if (m_m0Status != stopped) {
+            m_m0Status = stopped;
+            qDebug() << "ControlStateMachine: M0 changed to:" << stopped;
+            checkCompletionCondition();
+        }
+    }
+    // M14 - завершение
+    else if (address == DeltaAS332T::Addresses::M14_COMPLETE_STATUS) {
+        bool completed = (value > 0);
+        if (m_m14Status != completed) {
+            m_m14Status = completed;
+            qDebug() << "ControlStateMachine: M14 changed to:" << completed;
+            checkCompletionCondition();
+        }
+    }
+}
+
+void ControlStateMachine::checkCompletionCondition() {
+    // Проверяем условие завершения только в состоянии STOP
+    if (m_currentState == STATE_STOP) {
+        bool completionCondition = m_m0Status && m_m14Status;
+
+        if (completionCondition) {
+            qDebug() << "ControlStateMachine: Completion condition met (M0=1 && M14=1)";
+            emit completionSignal();
+        }
+    }
 }
 
 void ControlStateMachine::setupStateMachine() {
@@ -95,24 +172,41 @@ void ControlStateMachine::setupStateMachine() {
     // Устанавливаем начальное состояние
     m_stateMachine->setInitialState(m_readyCheckState);
     m_stateMachine->start();
+
+    qDebug() << "ControlStateMachine: State machine initialized and started";
 }
 
 void ControlStateMachine::transitionToReadyCheck() {
     m_currentState = STATE_READY_CHECK;
+
+    // Сбрасываем статусы при возврате в начальное состояние
+    m_m11Ready = false;
+    m_m12Started = false;
+    m_m0Status = false;
+    m_m14Status = false;
+
+    resetStatusRegisters();
+
     emit stateChanged(STATE_READY_CHECK);
     emit logMessage("Состояние: Проверка готовности");
+
+    qDebug() << "ControlStateMachine: Transitioned to READY_CHECK";
 }
 
 void ControlStateMachine::transitionToStartInterrupt() {
     m_currentState = STATE_START_INTERRUPT;
     emit stateChanged(STATE_START_INTERRUPT);
     emit logMessage("Состояние: Пуск/Прерывание");
+
+    qDebug() << "ControlStateMachine: Transitioned to START_INTERRUPT";
 }
 
 void ControlStateMachine::transitionToStop() {
     m_currentState = STATE_STOP;
     emit stateChanged(STATE_STOP);
     emit logMessage("Состояние: Стоп");
+
+    qDebug() << "ControlStateMachine: Transitioned to STOP";
 }
 
 void ControlStateMachine::transitionToRestartExit() {
@@ -122,6 +216,8 @@ void ControlStateMachine::transitionToRestartExit() {
     // ОСТАНАВЛИВАЕМ ЗАПИСЬ ГРАФИКА ПРИ ПЕРЕХОДЕ В СОСТОЯНИЕ RESTART_EXIT
     emit stopChartRecording();
     emit logMessage("Состояние: Повторение/Выход - остановка записи графика");
+
+    qDebug() << "ControlStateMachine: Transitioned to RESTART_EXIT";
 }
 
 // Public slots для внешних триггеров
@@ -170,15 +266,17 @@ void ControlStateMachine::triggerInterrupt() {
 
 void ControlStateMachine::triggerExit() {
     if (m_currentState == STATE_READY_CHECK || m_currentState == STATE_RESTART_EXIT) {
+        emit stopChartRecording();
         // ЕСЛИ ТЕСТ ЗАПУЩЕН (не в состоянии READY_CHECK), ОСТАНАВЛИВАЕМ ЕГО
         if (m_currentState == STATE_RESTART_EXIT) {
             // Тест уже завершен или остановлен, просто выходим
             emit logMessage("Выход из завершенного теста");
         } else if (m_currentState == STATE_READY_CHECK) {
             // Если тест активен в фоне, останавливаем его
+            emit stopCurrentTest();
             emit logMessage("Остановка теста и выход в меню");
         }
-
+        resetStatusRegisters();
         writeM6Exit();
         emit exitRequested();
         emit exitTriggered();
@@ -188,35 +286,28 @@ void ControlStateMachine::triggerExit() {
     }
 }
 
-// Обработчики статусов от устройства
-void ControlStateMachine::onM11StatusChanged(bool ready) {
-    if (m_m11Ready != ready) {
-        m_m11Ready = ready;
-        if (ready && m_currentState == STATE_READY_CHECK) {
-            emit m11ReadySignal(); // Сигнал для перехода
-        }
-    }
-}
-
-void ControlStateMachine::onM12StatusChanged(bool started) {
-    if (m_m12Started != started) {
-        m_m12Started = started;
-        if (started && m_currentState == STATE_START_INTERRUPT) {
-            emit m12StartedSignal(); // Сигнал для перехода
-        }
-    }
-}
-
-void ControlStateMachine::onM0M14StatusChanged(bool completed) {
-    if (m_completionStatus != completed) {
-        m_completionStatus = completed;
-        if (completed && m_currentState == STATE_STOP) {
-            emit completionSignal(); // Сигнал для перехода
-        }
-    }
-}
-
 // Приватные методы для записи команд
+void ControlStateMachine::resetStatusRegisters() {
+    if (!m_client || !m_client->isConnected()) {
+        qWarning() << "ControlStateMachine: Cannot reset status registers - device not connected";
+        return;
+    }
+
+    // Список регистров для сброса
+    QVector<QPair<QModbusDataUnit::RegisterType, quint16>> registersToReset = {
+        {QModbusDataUnit::Coils, DeltaAS332T::Addresses::M11_READY_STATUS},
+        {QModbusDataUnit::Coils, DeltaAS332T::Addresses::M12_START_STATUS},
+        {QModbusDataUnit::Coils, DeltaAS332T::Addresses::M0_STOP_STATUS},
+        {QModbusDataUnit::Coils, DeltaAS332T::Addresses::M14_COMPLETE_STATUS}
+    };
+
+    for (const auto& reg : registersToReset) {
+        m_client->writeRegister(reg.first, reg.second, 0);
+    }
+
+    emit logMessage("Все статусные регистры сброшены в 0");
+}
+
 void ControlStateMachine::writeM1ReadyCheck() {
     writeAndVerifyRegister(QModbusDataUnit::Coils,
                           DeltaAS332T::Addresses::M1_READY_CHECK,

@@ -1,21 +1,37 @@
+
 #include <QApplication>
 #include <QScopedPointer>
 #include <QCommandLineParser>
 #include <QLoggingCategory>
 #include <QMessageBox>
 #include <QDebug>
-#include "gui/MainWindow.h"
+
+#include "gui/mainwindow/MainWindow.h"
+#include "gui/connection/ConnectionViewController.h"
+#include "gui/database/DatabaseViewController.h"
+#include "gui/monitoring/MonitoringViewController.h"
+#include "gui/mode_selection/ModeSelectionViewController.h"
+
 #include "core/modbus/DeltaModbusClient.h"
+#include "core/connection/ConnectionManager.h"
+
 #include "data/DataRepository.h"
-#include "export/PngExportStrategy.h"
 #include "data/database/SqliteDatabaseRepository.h"
 #include "data/database/DatabaseAsyncManager.h"
+#include "data/database/DatabaseExportService.h"
+
+#include "monitoring/DataMonitor.h"
+
+#include "control/ModeController.h"
+#include "control/ControlStateMachine.h"
+#include "control/ControlUIController.h"
+
+#include "export/PngExportStrategy.h"
 
 void setupLogging() {
     QLoggingCategory::setFilterRules("*.debug=true\nqt.*.debug=false");
     qputenv("QT_MODBUS_TCP_TIMEOUT", "5000");
     qputenv("QT_MODBUS_TCP_RETRIES", "1");
-//    QLoggingCategory::setFilterRules("qt.modbus*=true");
 }
 
 void setupHighDPI() {
@@ -43,62 +59,141 @@ void setupCommandLine(QApplication& app, QCommandLineParser& parser) {
 }
 
 int main(int argc, char *argv[]) {
-
-    // Setup High DPI before QApplication
     setupHighDPI();
 
     QApplication app(argc, argv);
-
-    // Application info
     app.setApplicationName("Modbus Client");
-    app.setApplicationVersion("0.0.2");
+    app.setApplicationVersion("1.0.0");
     app.setOrganizationName("Красный Октябрь");
     app.setOrganizationDomain("koavia.ru");
 
-    // Setup logging
     setupLogging();
 
-    // Parse command line
     QCommandLineParser parser;
     setupCommandLine(app, parser);
 
     try {
+        qDebug() << "=== Application Starting ===";
 
-        // Create dependencies using RAII
-        QScopedPointer<IModbusClient> modbusClient(new DeltaModbusClient());
-        QScopedPointer<IExportStrategy> exportStrategy(new PngExportStrategy());
-        // Create database dependencies FIRST
-        QScopedPointer<SqliteDatabaseRepository> databaseRepository(new SqliteDatabaseRepository());
-        QScopedPointer<DatabaseAsyncManager> databaseManager(new DatabaseAsyncManager(databaseRepository.data()));
-        // Create data repository with database manager
-        QScopedPointer<IDataRepository> dataRepository(new DataRepository());
+        // 1. Create core components
+        qDebug() << "Creating Modbus client...";
+        auto modbusClient = new DeltaModbusClient();
+        auto exportStrategy = new PngExportStrategy();
 
+        // 2. Create database components
+        qDebug() << "Initializing database...";
+        auto databaseRepository = new SqliteDatabaseRepository();
+        if (!databaseRepository->initializeDatabase()) {
+            qCritical() << "Failed to initialize database";
+            return 1;
+        }
+
+        auto databaseManager = new DatabaseAsyncManager(databaseRepository);
+        auto databaseExportService = new DatabaseExportService(databaseRepository);
         databaseManager->start();
 
-        // Create main window with dependency injection
-        MainWindow window(modbusClient.data(),
-                         dataRepository.data(),
-                         exportStrategy.data());
+        // 3. Create data repository with database support
+        qDebug() << "Creating data repository...";
+        auto dataRepository = new DataRepository(databaseManager);
 
-        window.show();
+        // 4. Create monitoring and control components
+        qDebug() << "Creating connection and control components...";
+        auto connectionManager = new ConnectionManager(modbusClient);
+        auto dataMonitor = new DataMonitor(modbusClient, dataRepository);
 
-        // Установим обработчик для корректного завершения
-        QObject::connect(&app, &QApplication::aboutToQuit, []() {
-        });
+        auto modeController = new ModeController(modbusClient);
+        modeController->setDataRepository(dataRepository);
+        qDebug() << "ModeController connected to DataRepository";
 
-        int result = app.exec();
-        return result;
-    }
-    catch (const std::exception& e) {
+        // ВАЖНО: ControlStateMachine сам подключается к modbusClient для мониторинга статусов
+        auto controlStateMachine = new ControlStateMachine(modbusClient);
+        qDebug() << "ControlStateMachine initialized with status monitoring";
+
+        // 5. Create view controllers
+        qDebug() << "Creating view controllers...";
+        auto connectionViewController = new ConnectionViewController(connectionManager);
+        auto databaseViewController = new DatabaseViewController(databaseManager, databaseExportService);
+
+        // MonitoringViewController больше НЕ нужен modbusClient
+        auto monitoringViewController = new MonitoringViewController(
+            dataMonitor,
+            controlStateMachine,
+            modeController,
+            dataRepository
+        );
+
+        auto modeSelectionViewController = new ModeSelectionViewController(modeController);
+
+        // 6. Setup connections between components
+        qDebug() << "Setting up connections...";
+
+        // Connect database signals
+        QObject::connect(databaseManager, &DatabaseAsyncManager::testSessionsLoaded,
+                        databaseViewController, &DatabaseViewController::showSessions);
+        QObject::connect(databaseManager, &DatabaseAsyncManager::dataPointsLoaded,
+                        databaseViewController, &DatabaseViewController::showSessionData);
+
+        // Connect database view signals
+        QObject::connect(databaseViewController, &DatabaseViewController::loadSessionsRequested,
+                        databaseManager, &DatabaseAsyncManager::loadTestSessions);
+
+        QObject::connect(databaseViewController, &DatabaseViewController::loadSessionDataRequested,
+                        [databaseManager](int sessionId) {
+                            databaseManager->loadDataPoints(sessionId, "");
+                        });
+
+        QObject::connect(databaseViewController, &DatabaseViewController::exportToCsvRequested,
+                        databaseExportService, &DatabaseExportService::exportSessionToCsv);
+        QObject::connect(databaseViewController, &DatabaseViewController::exportToImageRequested,
+                        [databaseExportService, exportStrategy](int sessionId, const QString& filename) {
+                            databaseExportService->exportSessionToImage(sessionId, filename, exportStrategy);
+                        });
+
+        // Connect connection status to mode selection
+        QObject::connect(connectionManager, &ConnectionManager::connectionStatusChanged,
+                        [modeSelectionViewController](const QString& status) {
+                            bool connected = (status == "ПОДКЛЮЧЕН");
+                            modeSelectionViewController->onConnectionStateChanged(connected);
+                            qDebug() << "Connection state changed:" << connected;
+                        });
+        QObject::connect(connectionManager, &ConnectionManager::connectionStatusChanged,
+                         [modeController](const QString& status) {
+                             bool connected = (status == "ПОДКЛЮЧЕН");
+                             modeController->setConnectionState(connected);
+                             qDebug() << "ModeController connection state set to:" << connected;
+                         });
+
+        // Connect ControlStateMachine to ModeController for stopping tests
+        QObject::connect(controlStateMachine, &ControlStateMachine::stopCurrentTest,
+                        modeController, &ModeController::stopTest);
+
+        // 7. Create and setup main window
+        qDebug() << "Creating main window...";
+        MainWindow mainWindow;
+        mainWindow.setDataRepository(dataRepository);
+
+        mainWindow.setupUI(connectionViewController, modeSelectionViewController,
+                          monitoringViewController, databaseViewController);
+
+        // 8. Start the application
+        qDebug() << "Showing main window...";
+        mainWindow.show();
+
+        // Start monitoring
+        qDebug() << "Starting monitoring...";
+        monitoringViewController->startMonitoring();
+
+        qDebug() << "=== Application Started Successfully ===";
+        qDebug() << "✓ Status monitoring in ControlStateMachine";
+        qDebug() << "✓ Automatic state transitions enabled";
+        qDebug() << "✓ Clean architecture with proper separation of concerns";
+
+        return app.exec();
+
+    } catch (const std::exception& e) {
         qCritical() << "Fatal error:" << e.what();
         QMessageBox::critical(nullptr, "Fatal Error",
             QString("Application failed to start: %1").arg(e.what()));
-        return 1;
-    }
-    catch (...) {
-        qCritical() << "Unknown fatal error";
-        QMessageBox::critical(nullptr, "Fatal Error",
-            "Unknown error occurred during startup");
         return 1;
     }
 }

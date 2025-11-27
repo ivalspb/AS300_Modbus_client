@@ -17,7 +17,7 @@ public:
         STATE_STOP,           // Состояние 3: Стоп
         STATE_RESTART_EXIT    // Состояние 4: Повторение/Выход
     };
-    Q_ENUM(State)  // Добавляем для регистрации
+    Q_ENUM(State)
 
     explicit ControlStateMachine(IModbusClient* client, QObject* parent = nullptr);
     ~ControlStateMachine();
@@ -34,12 +34,12 @@ signals:
     void restartRequested();
     void interruptRequested();
     void exitRequested();
-    void modeSelectionRequested(); // Сигнал для переключения на вкладку выбора режима
+    void modeSelectionRequested();
     void registerWriteVerified(const QString& registerName, quint16 value, bool success);
     void stopCurrentTest();
 
-    void startChartRecording();  // Сигнал для начала записи графика
-    void stopChartRecording();   // Сигнал для остановки записи графика
+    void startChartRecording();
+    void stopChartRecording();
 
     // Сигналы для переходов state machine
     void m11ReadySignal();
@@ -59,19 +59,21 @@ public slots:
     void triggerInterrupt();
     void triggerExit();
 
-    // Слоты для обработки статусов от устройства
-    void onM11StatusChanged(bool ready);
-    void onM12StatusChanged(bool started);
-    void onM0M14StatusChanged(bool completed);
-
 private slots:
     void transitionToReadyCheck();
     void transitionToStartInterrupt();
     void transitionToStop();
     void transitionToRestartExit();
 
+    // НОВЫЙ слот для обработки статусных регистров
+    void onStatusRegisterRead(QModbusDataUnit::RegisterType type, quint16 address, quint16 value);
+
 private:
     void setupStateMachine();
+    void setupStatusMonitoring();
+    void checkCompletionCondition();
+    void resetStatusRegisters();
+
     void writeM1ReadyCheck();
     void writeM2Start();
     void writeM3Stop();
@@ -92,7 +94,9 @@ private:
     QState* m_stopState;
     QState* m_restartExitState;
 
+    // Статусные флаги для отслеживания регистров
     bool m_m11Ready;
     bool m_m12Started;
-    bool m_completionStatus;
+    bool m_m0Status;    // НОВЫЙ
+    bool m_m14Status;   // НОВЫЙ
 };

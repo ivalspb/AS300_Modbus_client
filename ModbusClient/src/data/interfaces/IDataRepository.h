@@ -17,10 +17,12 @@ public:
     virtual QVector<QString> getAvailableParameters() const = 0;
     virtual void clearData(const QString& parameter = QString()) = 0;
     virtual int getDataPointCount(const QString& parameter) const = 0;
+    virtual void setCurrentTestSession(const QString& testType) = 0;
+    virtual void saveCurrentSessionToDatabase() = 0;
+    virtual void finalizeSession() = 0;
 
 signals:
     void dataAdded(const QString& parameter, double value);
     void dataCleared(const QString& parameter);
+    void sessionCreated(int sessionId);
 };
-// const QString& parameter);
-// };

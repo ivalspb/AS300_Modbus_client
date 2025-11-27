@@ -17,17 +17,21 @@ if(POLICY CMP0071)
 endif()
 
 # Опции конфигурации
-option(BUILD_TESTS "Build tests" ON)
+option(BUILD_TESTS "Build tests" OFF)
 option(BUILD_EXAMPLES "Build examples" OFF)
 
 # Поиск Qt
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets Charts Network SerialBus Sql)
 
+# Поиск SQLite
+find_package(PkgConfig REQUIRED)
+#pkg_check_modules(SQLite3 REQUIRED sqlite3)
+
 # Основное приложение
 add_subdirectory(src)
 
 # Тесты
-if(BUILD_TESTS AND FALSE)
+if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
