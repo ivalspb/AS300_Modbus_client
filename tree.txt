@@ -1,0 +1,135 @@
+|   CMakeLists.txt
+|   create_from_tree.sh
+|   structure.txt
+|   
++---src
+|   |   CMakeLists.txt
+|   |   main.cpp
+|   |   
+|   +---control
+|   |       ControlStateMachine.cpp
+|   |       ControlStateMachine.h
+|   |       ControlUIController.cpp
+|   |       ControlUIController.h
+|   |       ModeController.cpp
+|   |       ModeController.h
+|   |       ParameterController.cpp
+|   |       ParameterController.h
+|   |       
+|   +---core
+|   |   +---connection
+|   |   |       ConnectionManager.cpp
+|   |   |       ConnectionManager.h
+|   |   |       
+|   |   +---interfaces
+|   |   |       IAddressMapper.h
+|   |   |       IIndicator.h
+|   |   |       IModbusClient.h
+|   |   |       IPollingConfigurator.h
+|   |   |       IRequestQueue.h
+|   |   |       
+|   |   +---mapping
+|   |   |       DeltaAddressMap.h
+|   |   |       DeltaAddressMapper.cpp
+|   |   |       DeltaAddressMapper.h
+|   |   |       DeltaController.h
+|   |   |       
+|   |   \---modbus
+|   |       |   CustomModbusClient.cpp
+|   |       |   CustomModbusClient.h
+|   |       |   DeltaModbusClient.cpp
+|   |       |   DeltaModbusClient.h
+|   |       |   ModbusRequestHandler.cpp
+|   |       |   ModbusRequestHandler.h
+|   |       |   ModbusRequestQueue.cpp
+|   |       |   ModbusRequestQueue.h
+|   |       |   
+|   |       \---factoies
+|   |               PollingConfiguratorFactory.cpp
+|   |               PollingConfiguratorFactory.h
+|   |               
+|   +---data
+|   |   |   DataPoint.h
+|   |   |   DataRepository.cpp
+|   |   |   DataRepository.h
+|   |   |   
+|   |   +---database
+|   |   |       DatabaseAsyncManager.cpp
+|   |   |       DatabaseAsyncManager.h
+|   |   |       DatabaseExportService.cpp
+|   |   |       DatabaseExportService.h
+|   |   |       DataPointDao.cpp
+|   |   |       DataPointDao.h
+|   |   |       IDatabaseRepository.h
+|   |   |       SqliteDatabaseRepository.cpp
+|   |   |       SqliteDatabaseRepository.h
+|   |   |       TestSession.h
+|   |   |       TestSessionDao.cpp
+|   |   |       TestSessionDao.h
+|   |   |       
+|   |   \---interfaces
+|   |           IDataRepository.h
+|   |           
+|   +---export
+|   |   |   PngExportStrategy.cpp
+|   |   |   PngExportStrategy.h
+|   |   |   
+|   |   \---interfaces
+|   |           IExportStrategy.h
+|   |           
+|   +---gui
+|   |   |   CMakeLists.txt
+|   |   |   
+|   |   +---connection
+|   |   |       ConnectionViewController.cpp
+|   |   |       ConnectionViewController.h
+|   |   |       
+|   |   +---database
+|   |   |       DatabaseViewController.cpp
+|   |   |       DatabaseViewController.h
+|   |   |       
+|   |   +---factories
+|   |   |       WidgetFactory.cpp
+|   |   |       WidgetFactory.h
+|   |   |       
+|   |   +---mainwindow
+|   |   |       MainWindow.cpp
+|   |   |       MainWindow.h
+|   |   |       
+|   |   +---mode_selection
+|   |   |       ModeSelectionViewController.cpp
+|   |   |       ModeSelectionViewController.h
+|   |   |       
+|   |   +---monitoring
+|   |   |       MonitoringViewController.cpp
+|   |   |       MonitoringViewController.h
+|   |   |       
+|   |   \---widgets
+|   |           ChartWidget.cpp
+|   |           ChartWidget.h
+|   |           ConnectionWidget.cpp
+|   |           ConnectionWidget.h
+|   |           DualIndicatorWidget.cpp
+|   |           DualIndicatorWidget.h
+|   |           MonitorWidget.cpp
+|   |           MonitorWidget.h
+|   |           SpeedometerWidget.cpp
+|   |           SpeedometerWidget.h
+|   |           
+|   \---monitoring
+|           AnalogValueMonitor.cpp
+|           AnalogValueMonitor.h
+|           DataMonitor.cpp
+|           DataMonitor.h
+|           DiscreteInputMonitor.cpp
+|           DiscreteInputMonitor.h
+|           
+\---tests
+    |   CMakeLists.txt
+    |   
+    \---mocks
+            MockDataRepository.cpp
+            MockDataRepository.h
+            MockModbusClient.cpp
+            MockModbusClient.h
+            
